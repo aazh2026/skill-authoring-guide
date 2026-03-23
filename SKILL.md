@@ -455,6 +455,120 @@ registry:
 
 ---
 
+## 4.4 企业级 Governance 最佳实践 🔥 **新增**
+
+### 组织级 Skill 管理
+
+**1. Skill 审批流程**
+
+```
+开发 → 自评 → 同行评审 → 安全审查 → 发布 → 监控
+  ↓       ↓         ↓           ↓         ↓       ↓
+本地   评分≥80   人工Review   安全扫描   灰度   指标
+```
+
+**2. Skill 分级标准**
+
+| 级别 | 适用范围 | 审批要求 | 示例 |
+|------|----------|----------|------|
+| **L1: 个人** | 开发者自己 | 自评即可 | 个人调试工具 |
+| **L2: 团队** | 团队内部 | 团队Lead审批 | 代码审查Skill |
+| **L3: 部门** | 整个部门 | 架构师审批 | 标准API生成 |
+| **L4: 企业** | 全公司 | 安全+架构审批 | 财务计算Skill |
+| **L5: 核心** | 生产核心 | 委员会审批 | 订单处理Skill |
+
+**3. 企业安全基线**
+
+所有 L3+ Skill 必须满足：
+
+```yaml
+enterprise_security_baseline:
+  required:
+    - input_validation: strict
+    - output_sanitization: true
+    - audit_logging: mandatory
+    - rate_limiting: enabled
+    - data_classification: labeled
+    
+  forbidden:
+    - direct_database_write_without_review
+    - external_api_calls_without_whitelist
+    - sensitive_data_in_logs
+    - hardcoded_credentials
+    
+  review_checklist:
+    - [ ] 安全团队审批
+    - [ ] 架构师审批
+    - [ ] 合规性检查
+    - [ ] 性能测试通过
+    - [ ] 灾难恢复方案
+```
+
+**4. 生产环境监控**
+
+```yaml
+production_monitoring:
+  metrics:
+    - name: hallucination_rate
+      threshold: "< 0.01"  # 1%
+      action: alert
+      
+    - name: safety_violations
+      threshold: "= 0"  # 零容忍
+      action: immediate_disable
+      
+    - name: user_override_rate
+      threshold: "< 0.15"  # 15%
+      action: review
+      
+    - name: response_latency_p99
+      threshold: "< 5s"
+      action: optimize
+      
+  alerting:
+    - channel: security-team@company.com
+      severity: critical
+      
+    - channel: skill-ops-channel
+      severity: warning
+```
+
+**5. 合规与审计**
+
+```yaml
+compliance:
+  standards:
+    - soc2_type_ii
+    - gdpr
+    - hipaa  # 如适用
+    
+  audit_trail:
+    - who: user_id
+    - what: skill_invocation
+    - when: timestamp
+    - why: input_context
+    - result: output_hash
+    
+  data_retention:
+    - logs: "90d"
+    - outputs: "30d"
+    - audit_trail: "7y"
+```
+
+### SkillOps 团队配置
+
+**建议角色：**
+
+| 角色 | 职责 | 人数 |
+|------|------|------|
+| **Skill Architect** | 设计评审、标准制定 | 1-2 |
+| **Skill Engineer** | Skill开发、优化 | 3-5 |
+| **Safety Engineer** | 安全审查、风险评估 | 1-2 |
+| **SkillOps** | 监控、运维、发布 | 1-2 |
+| **Domain Expert** | 业务逻辑验证 | 按需 |
+
+---
+
 # 5. 实战案例
 
 ## 5.1 Case Study: PRD 生成流水线
