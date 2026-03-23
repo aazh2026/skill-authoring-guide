@@ -1,465 +1,640 @@
 ---
 name: skill-authoring-guide
-description: 编写高质量 Skill 的完整指南。提供标准化结构、场景化描述、边界约束、SOP 流程和示例模板，帮助开发者创建 LLM 友好的 Agent Skill。
-
-input_schema:
-  skill_type:
-    type: string
-    required: true
-    enum: ["extraction", "transformation", "analysis", "decision", "tool", "composite"]
-    description: Skill 类型
-  complexity:
-    type: string
-    required: false
-    default: "medium"
-    enum: ["simple", "medium", "complex"]
-    description: 复杂程度
-  target_model:
-    type: string
-    required: false
-    default: "claude"
-    enum: ["claude", "gpt", "gemini", "general"]
-    description: 目标 LLM 模型
-
-output_schema:
-  template:
-    type: string
-    description: 完整的 skill.md 模板
-  checklist:
-    type: array
-    description: 编写检查清单
-    items: { type: string }
-  examples:
-    type: array
-    description: 参考示例
-    items:
-      type: object
-      properties:
-        scenario: { type: string }
-        snippet: { type: string }
-  common_pitfalls:
-    type: array
-    description: 常见陷阱
-    items: { type: string }
-
-verification:
-  - check: "output.template contains '## Description'"
-    severity: error
-  - check: "output.template contains '## Input/Output Schema' or '## Input Schema'"
-    severity: error
-  - check: "len(output.checklist) >= 8"
-    severity: error
-  - check: "output.template contains trigger keywords or 'when to use'"
-    severity: warning
-  - check: "output.template contains Constraints or Guardrails"
-    severity: warning
-
----
-
-# Skill 编写指南
-
-编写高质量 skill.md 的完整指南：**消除歧义，明确边界**。
-
-## 1. 标准化结构布局
-
-一个 LLM 友好的 skill.md 应该包含以下模块：
-
-```markdown
-# Skill: [Name]
-
-## Description
-[场景化描述，说明何时调用]
-
-## Capabilities
-- [功能点1]
-- [功能点2]
-
-## Constraints/Rules
-- [不能做什么1]
-- [不能做什么2]
-
-## Input/Output Schema
-[参数定义]
-
-## Workflow/Steps
-[执行逻辑]
-
-## Examples
-[2-3个示例]
-```
-
----
-
-## 2. 编写"场景化"描述 (Trigger-focused)
-
-**❌ 错误示例：**
-> 查询天气
-
-**✅ 正确示例：**
-> 当用户询问特定城市的实时气温、湿度或未来 7 天的天气预报时，调用此技能。
-> 关键词：天气、温度、降雨、 forecast、明天、下周
-
-**要点：**
-- 写触发场景，不是功能列表
-- 埋入用户可能说的关键词
-- 明确"什么时候用我"
-
----
-
-## 3. 输入输出的"极简主义"与"强类型"
-
-**参数命名：**
-- ✅ `start_date` 
-- ❌ `d1`
-
-**强制格式要求：**
-```markdown
-## Input Schema
-
-| 参数 | 类型 | 必填 | 描述 |
-|------|------|------|------|
-| query_date | string | 是 | 查询日期 |
-
-**格式要求：**
-- 必须转换为 YYYY-MM-DD 格式
-- 如果用户说"明天"，根据当前时间计算具体日期
-```
-
-**输出预期：**
-```markdown
-## Output Schema
-
-- 格式：JSON
-- 字段：temperature (number), humidity (number), forecast (array)
-- 单位：摄氏度、百分比
-```
-
----
-
-## 4. 设定严苛的边界约束 (Guardrails)
-
-防止 Agent "拿锤子看什么都是钉子"。
-
-**否定约束：**
-> 如果用户询问政治敏感话题，严禁调用此搜索技能。
-
-**范围约束：**
-> 仅支持查询 2000 年以后的论文数据。
-
-**权限约束：**
-> 在没有获得用户明确的订单号之前，不得执行取消订单操作。
-
-**格式：**
-```markdown
-## Constraints
-
-- 严禁执行 DELETE, DROP, UPDATE 等写操作
-- 单次查询返回行数不得超过 100 行
-- 如果用户询问薪资数据，回复"无权访问"
-```
-
----
-
-## 5. Workflow：给 Agent 的"SOP"
-
-复杂技能需要明确的执行步骤。
-
-```markdown
-## Workflow
-
-1. **解析输入**
-   - 提取关键词
-   - 验证参数格式
-
-2. **预处理**
-   - 转换日期格式
-   - 补全默认参数
-
-3. **执行核心逻辑**
-   - 调用 API/工具
-   - 处理异常情况
-
-4. **后处理**
-   - 格式化输出
-   - 添加元数据
-
-5. **验证结果**
-   - 检查输出完整性
-   - 确保符合 schema
-```
-
-**要点：**
-- 步骤编号明确
-- 每个步骤有具体动作
-- 包含异常处理分支
-
----
-
-## 6. 示例 (Few-shot) 的质量
-
-示例是提升鲁棒性最快的方法。
-
-**推荐格式：**
-```markdown
-## Examples
-
-### 示例1：基本查询
-
-**User:** 帮我看看北京明天冷不冷？
-
-**Agent Thought:** 用户询问天气趋势，需要调用 weather 技能。
-
-**Tool Call:**
-```json
-{
-  "tool": "get_weather",
-  "parameters": {
-    "city": "Beijing",
-    "date": "2024-05-21"
-  }
-}
-```
-
-**Result:**
-```json
-{
-  "temperature": "15°C-22°C",
-  "condition": "多云",
-  "recommendation": "适合穿薄外套"
-}
-```
-
-**Agent Response:** 北京明天温度 15-22°C，多云，建议穿薄外套。
-```
-
-**要点：**
-- 展示完整链路：User → Thought → Tool → Result → Response
-- 包含 2-3 个不同场景
-- 覆盖正常和边界情况
-
----
-
-## 7. 实用模板参考
-
-### 模板 A：数据查询类
-
-```markdown
----
-name: sql_data_analyst
-description: 从公司内部销售数据库提取数据并生成分析报告。当用户询问销售额、利润率或客户分布时使用。
-
-input_schema:
-  query_type:
-    type: string
-    required: true
-    enum: ["sales", "profit", "customer_distribution"]
-  time_range:
-    type: string
-    required: true
-    description: "如：2024-Q1, last_month, ytd"
-  filters:
-    type: object
-    required: false
-    properties:
-      region: { type: string }
-      product_line: { type: string }
-
-output_schema:
-  data:
-    type: array
-    items: { type: object }
-  summary:
-    type: string
-  chart_recommendation:
-    type: string
-
-verification:
-  - check: "output.data.length <= 100"
-    severity: error
-
----
-
-# Skill: SQL_Data_Analyst
-
-## Description
-用于从公司内部销售数据库中提取数据并生成分析报告。
-
-**触发场景：**
-- 用户询问销售额、订单量、客单价
-- 需要查看同比/环比趋势
-- 分析客户地域分布
-
-**关键词：** 销售额、利润、客户、趋势、对比、排名
-
-## Capabilities
-- 自动编写符合 PostgreSQL 语法的 SQL 语句
-- 对查询结果进行趋势分析和同比/环比计算
-- 推荐合适的图表类型
-
-## Constraints
-- 严禁执行 DELETE, DROP, UPDATE 等写操作
-- 单次查询返回行数不得超过 100 行
-- 如果用户询问薪资相关数据，回复"无权访问"
-- 不处理实时数据，仅 T+1 数据
-
-## Input/Output Schema
-[见上文]
-
-## Workflow
-1. 理解用户意图并提取时间维度
-2. 构建 SQL 并通过 db_executor 工具执行
-3. 对返回的数据进行多维解读
-4. 生成自然语言摘要
-
-## Examples
-[2-3个完整示例]
-```
-
-### 模板 B：内容生成类
-
-```markdown
----
-name: blog_post_generator
-description: 根据主题生成技术博客文章。当用户需要撰写技术文章、教程或文档时使用。
+description: Agent Skill Engineering Handbook - 从 Prompt 片段到工程化资产的完整方法论。涵盖 Skill 设计、Skill 系统、Skill 评估、Skill 治理四大体系。
 
 input_schema:
   topic:
     type: string
     required: true
-    description: 文章主题
-  audience:
+    enum: ["design", "trigger", "quality", "system", "governance", "template"]
+    description: 要查询的主题
+  skill_level:
     type: string
     required: false
     default: "intermediate"
     enum: ["beginner", "intermediate", "advanced"]
-  word_count:
-    type: integer
-    required: false
-    default: 1500
-    minimum: 500
-    maximum: 5000
+    description: 技能水平
 
 output_schema:
-  title:
-    type: string
   content:
     type: string
-  outline:
+    description: 主题内容
+  templates:
     type: array
-  code_examples:
+    items:
+      type: object
+      properties:
+        name: { type: string }
+        template: { type: string }
+  rubric:
+    type: object
+    description: 质量评估标准
+  case_studies:
     type: array
+    items: { type: string }
 
 verification:
-  - check: "len(output.content) >= input.word_count * 0.9"
-    severity: warning
+  - check: "output.content is not empty"
+    severity: error
+  - check: "topic in ['design', 'trigger', 'quality', 'system', 'governance', 'template']"
+    severity: error
 
 ---
 
-# Skill: Blog_Post_Generator
+# Agent Skill Engineering Handbook
 
-## Description
-根据主题生成技术博客文章。
+从 Prompt 片段到工程化资产的完整方法论。
 
-**触发场景：**
-- 用户说"帮我写一篇关于XXX的文章"
-- 需要技术教程或入门指南
-- 为产品撰写说明文档
+## 核心理念
 
-**关键词：** 写文章、教程、指南、文档、博客
+> **Skill ≠ Prompt，而是一个"可调用的结构化操作手册"**
+
+Skill = 一组指令 + 资源 + 可按需加载的能力单元
+
+## 四个体系
+
+1. **Skill 设计** - 如何写好单个 Skill
+2. **Skill 触发** - 如何让 Skill 被正确调用
+3. **Skill 质量** - 如何评估 Skill 好坏
+4. **Skill 系统** - 如何构建 Skill 生态
+5. **Skill 治理** - 如何安全可控
+
+---
+
+# 1. Skill 设计体系
+
+## 1.1 标准化结构（进化版）
+
+```yaml
+---
+name: <skill-name>                    # 小写字母+下划线
+description: |
+  <场景化描述，说明何时调用>
+  
+  **触发场景：**
+  - <场景1>
+  - <场景2>
+  
+  **关键词：** <keyword1>, <keyword2>, <keyword3>
+
+triggers:                             # NEW: 显式触发机制
+  - type: keyword
+    patterns: ["keyword1", "keyword2"]
+  - type: intent
+    patterns: ["intent1", "intent2"]
+  - type: context
+    condition: "file_type == 'javascript'"
+
+input_schema:
+  param1:
+    type: string
+    required: true
+    description: <参数描述>
+    validation: <验证规则>
+
+output_schema:
+  result:
+    type: object
+    description: <输出描述>
+
+dependencies:                         # NEW: 依赖的skills
+  - skill: <skill-name>
+    version: ">=1.0.0"
+
+verification:                         # NEW: 自动化验证
+  - check: "<验证表达式>"
+    severity: error|warning
+
+---
+
+# Skill: <Name>
+
+## Intent
+<这个skill解决什么问题>
+
+## When to Use
+<明确的触发条件>
 
 ## Capabilities
-- 生成结构化的技术文章
-- 自动包含代码示例
-- 根据受众调整技术深度
+- [能力1]
+- [能力2]
+- [能力3]
 
 ## Constraints
-- 不包含敏感或版权争议内容
-- 代码示例必须可运行
-- 技术概念需要解释清楚
-- 不生成过长的文章（<5000字）
+- [边界1]
+- [边界2]
+- [边界3]
 
-## Workflow
-1. 分析 topic，确定核心技术概念
-2. 生成文章大纲
-3. 撰写内容，插入代码示例
-4. 根据 audience 调整技术深度
-5. 输出完整文章
+## Procedure
+1. [步骤1]
+2. [步骤2]
+3. [步骤3]
 
 ## Examples
-[示例...]
+<完整的输入输出示例>
+
+## Anti-patterns
+<常见错误用法>
 ```
 
 ---
 
-## 8. 检查清单 (Checklist)
+## 1.2 Trigger Engineering（核心章节）
 
-发布前检查：
+### 触发来源
 
-- [ ] **名称**：简洁、动词开头、无歧义
-- [ ] **描述**：场景化，包含触发条件和关键词
-- [ ] **Capabilities**：3-5 个具体功能点
-- [ ] **Constraints**：至少 2 条硬性约束
-- [ ] **Input Schema**：所有参数有类型、必填、描述
-- [ ] **Output Schema**：格式明确，字段完整
-- [ ] **Workflow**：步骤清晰，逻辑完整
-- [ ] **Examples**：2-3 个，覆盖不同场景
-- [ ] **Verification**：可自动验证的规则
+| 类型 | 机制 | 示例 |
+|------|------|------|
+| **Keyword** | 关键词匹配 | "test", "coverage" |
+| **Intent** | 意图识别 | "写测试", "生成测试用例" |
+| **Context** | 上下文条件 | 当前文件类型、项目结构 |
+| **Semantic** | 语义相似度 | 向量匹配 |
 
----
+### 触发设计原则
 
-## 9. 常见陷阱
-
-**❌ 描述太抽象**
-> "处理数据"
-
-**✅ 描述具体**
-> "从 CSV 文件提取销售数据并计算月度汇总"
-
----
-
-**❌ 没有边界**
-> 技能可以做任何事
-
-**✅ 明确边界**
-> "仅处理销售数据，不处理用户信息"
-
----
-
-**❌ 示例太少**
-> 只有 1 个简单示例
-
-**✅ 示例覆盖全面**
-> 正常输入、边界输入、错误处理
-
----
-
-**❌ 参数不严谨**
-> `date: 日期`
-
-**✅ 参数精确**
-> `date: 格式 YYYY-MM-DD，如 2024-05-21`
-
----
-
-## 10. 进阶技巧：自迭代
-
-**当 Agent 在某任务上反复出错时，不要直接改代码，先改 skill.md。**
-
-在 Constraints 里加一条针对该错误的"补丁"：
-
-```markdown
-## Constraints
-
-- ...原有约束...
-- ⚠️ **重要**：用户说"便宜"时，指的是价格低，不是质量差
+**1. 覆盖多表达**
+```yaml
+triggers:
+  - type: keyword
+    patterns:
+      - "test"
+      - "add test"
+      - "coverage"
+      - "write test"
+      - "单元测试"
 ```
 
-通常能解决 80% 的意图识别问题。
+**2. 避免歧义**
+```yaml
+# ❌ 太泛，容易误触发
+description: "处理代码"
+
+# ✅ 精确
+description: "为 JavaScript 函数生成 Jest 单元测试"
+```
+
+**3. 控制长度**
+```yaml
+# description <= 1024 tokens（上下文限制）
+# 建议 200-500 字
+```
+
+### 触发优化示例
+
+**❌ 差：**
+```yaml
+description: "generate test"
+```
+
+**✅ 好：**
+```yaml
+description: |
+  Generate Jest unit tests for JavaScript functions.
+  
+  **Triggers:**
+  - User says: "test", "add test", "coverage"
+  - Current file: *.test.js, *.spec.js
+  - Intent: testing, quality assurance
+```
 
 ---
 
-## 总结
+# 2. Skill 质量体系
 
-> **高质量的 skill.md = 清晰的边界 + 具体的示例 + 可验证的输出**
+## 2.1 Skill Quality Rubric
 
-写好 skill.md，Agent 才能发挥最大价值。
+### 5 维度评估
+
+| 维度 | 权重 | 评估标准 |
+|------|------|----------|
+| **Trigger Precision** | 0.25 | 触发精度：正确触发率 > 90%，误触发率 < 5% |
+| **Actionability** | 0.25 | 可执行性：步骤明确，输出可直接使用 |
+| **Reusability** | 0.20 | 复用性：脱离特定上下文仍可用 |
+| **Composability** | 0.20 | 可组合性：可被其他 skill 调用 |
+| **Determinism** | 0.10 | 确定性：相同输入输出稳定 |
+
+### 评分标准
+
+```
+Score = 0.25*Trigger + 0.25*Action + 0.20*Reuse + 0.20*Compose + 0.10*Determinism
+```
+
+| 分数 | 等级 | 说明 |
+|------|------|------|
+| 90-100 | S | 生产级，可规模化使用 |
+| 80-89 | A | 可用，小优化后上线 |
+| 70-79 | B | 需要针对性改进 |
+| <70 | C | 不建议使用 |
+
+### 评估检查清单
+
+**Trigger Precision**
+- [ ] 关键词覆盖主要表达方式
+- [ ] 意图描述清晰无歧义
+- [ ] 有明确的反例说明
+
+**Actionability**
+- [ ] 步骤编号明确
+- [ ] 每个步骤有具体动作
+- [ ] 输出格式标准化
+
+**Reusability**
+- [ ] 不依赖特定项目结构
+- [ ] 参数可配置
+- [ ] 有默认值
+
+**Composability**
+- [ ] 输入输出标准化
+- [ ] 有清晰的接口定义
+- [ ] 可被其他 skill 调用
+
+**Determinism**
+- [ ] 相同输入输出一致
+- [ ] 无随机行为
+- [ ] 错误处理稳定
+
+---
+
+## 2.2 Skill 评估方法
+
+### 自动化测试
+
+```yaml
+# test_cases.yaml
+test_cases:
+  - id: TC001
+    input:
+      query: "帮我写测试"
+    expected_trigger: true
+    expected_score: ">=0.9"
+    
+  - id: TC002
+    input:
+      query: "今天天气如何"
+    expected_trigger: false
+```
+
+### 人工评估
+
+```yaml
+# evaluation.yaml
+evaluators:
+  - role: "资深开发者"
+    criteria:
+      - "步骤是否可执行"
+      - "输出是否实用"
+  - role: "产品经理"
+    criteria:
+      - "是否解决实际问题"
+      - "是否易于理解"
+```
+
+---
+
+# 3. Skill 系统体系
+
+## 3.1 Skill Graph（技能图谱）
+
+### 从单 Skill 到 Skill Pipeline
+
+```
+需求分析 → 设计 → 编码 → 测试 → 发布
+    ↓        ↓      ↓      ↓      ↓
+  prd    design   code   test  deploy
+  skill  skill   skill  skill  skill
+```
+
+### Skill 类型定义
+
+| 类型 | 说明 | 示例 |
+|------|------|------|
+| **Atomic Skill** | 原子技能，不可再分 | 写单元测试 |
+| **Composite Skill** | 组合技能，调用其他 skills | 完整开发流程 |
+| **Meta Skill** | 元技能，选择和编排 skills | 根据需求选择技术栈 |
+
+### Skill Pipeline 示例
+
+```yaml
+# pipeline.yaml
+name: full_development_workflow
+description: 完整开发流程
+
+stages:
+  - name: requirements
+    skill: prd_analyzer
+    condition: "input.type == 'feature'"
+    
+  - name: design
+    skill: architecture_designer
+    depends_on: [requirements]
+    
+  - name: implementation
+    skill: code_generator
+    depends_on: [design]
+    
+  - name: testing
+    skill: test_generator
+    depends_on: [implementation]
+    
+  - name: review
+    skill: code_reviewer
+    depends_on: [testing]
+
+error_handling:
+  - stage: testing
+    on_failure: retry_with_fix
+    max_retries: 3
+```
+
+### Skill 依赖管理
+
+```yaml
+dependencies:
+  - skill: code_linter
+    version: ">=1.0.0"
+    required: true
+    
+  - skill: test_runner
+    version: ">=2.0.0"
+    required: false  # 可选依赖
+    condition: "config.include_tests == true"
+```
+
+---
+
+## 3.2 Skill 生态系统
+
+### Skill 分层架构
+
+```
+┌─────────────────────────────────────┐
+│  Layer 3: Business Skills           │
+│  (PRD生成、用户故事、竞品分析)         │
+├─────────────────────────────────────┤
+│  Layer 2: Domain Skills             │
+│  (API设计、数据库设计、UI组件)         │
+├─────────────────────────────────────┤
+│  Layer 1: Technical Skills          │
+│  (代码生成、测试生成、重构)            │
+├─────────────────────────────────────┤
+│  Layer 0: Foundation Skills         │
+│  (文件操作、Git操作、Shell命令)        │
+└─────────────────────────────────────┘
+```
+
+---
+
+# 4. Skill 治理体系
+
+## 4.1 Skill 安全
+
+### 风险评估
+
+| 风险 | 说明 | 防护措施 |
+|------|------|----------|
+| **代码注入** | Skill生成恶意代码 | 沙箱执行、人工Review |
+| **信息泄露** | Skill读取敏感信息 | 权限控制、数据脱敏 |
+| **外部调用** | Skill调用危险API | 白名单机制、审计日志 |
+| **提示注入** | 用户输入污染Skill | 输入验证、参数化 |
+
+### 安全策略
+
+```yaml
+security:
+  sandbox:
+    enabled: true
+    network: false  # 禁止网络访问
+    filesystem: readonly  # 只读文件系统
+    
+  permissions:
+    - resource: filesystem
+      access: ["read", "write"]
+      paths: ["/workspace"]
+    - resource: network
+      access: []  # 禁止
+      
+  audit:
+    log_level: "info"
+    retention: "30d"
+```
+
+## 4.2 Skill 版本管理
+
+```yaml
+versioning:
+  strategy: "semver"
+  
+  compatibility:
+    - version: "1.x"
+      api: "stable"
+    - version: "2.x"
+      api: "breaking"
+      migration_guide: "/docs/migration/v2.md"
+```
+
+## 4.3 Skill 注册与发现
+
+```yaml
+registry:
+  name: "organization-skill-registry"
+  
+  metadata:
+    - name
+    - description
+    - author
+    - version
+    - tags
+    - quality_score
+    - usage_count
+    
+  search:
+    - full_text: true
+    - semantic: true
+    - filters: [tag, author, quality]
+```
+
+---
+
+# 5. 实战案例
+
+## 5.1 Case Study: PRD 生成流水线
+
+### 场景
+从需求到技术方案的完整流程。
+
+### Skill Pipeline
+
+```
+需求描述 → PRD生成 → 技术方案 → 任务拆解
+    ↓          ↓          ↓          ↓
+  input    prd_writer  tech_design  task_breakdown
+```
+
+### Skill 定义
+
+**Skill 1: prd_writer**
+```yaml
+name: prd_writer
+description: 根据需求描述生成产品需求文档
+
+triggers:
+  - type: intent
+    patterns: ["写PRD", "产品需求", "需求文档"]
+
+input_schema:
+  requirement: { type: string, required: true }
+  product_type: { type: string, enum: ["web", "mobile", "api"] }
+
+output_schema:
+  prd:
+    title: string
+    background: string
+    user_stories: array
+    acceptance_criteria: array
+    non_functional: array
+```
+
+**Skill 2: tech_design**
+```yaml
+name: tech_design
+description: 根据PRD生成技术方案
+dependencies:
+  - skill: prd_writer
+    required: true
+
+input_schema:
+  prd: { type: object, required: true }
+  tech_stack: { type: string, enum: ["react", "vue", "angular"] }
+
+output_schema:
+  design:
+    architecture: string
+    database_schema: object
+    api_endpoints: array
+    components: array
+```
+
+**Skill 3: task_breakdown**
+```yaml
+name: task_breakdown
+description: 将技术方案拆解为开发任务
+dependencies:
+  - skill: tech_design
+    required: true
+
+output_schema:
+  tasks:
+    - id: string
+      title: string
+      description: string
+      estimate: string
+      dependencies: array
+```
+
+### 使用示例
+
+```
+User: 帮我做一个电商平台的购物车功能
+
+Agent:
+  1. 调用 prd_writer → 生成 PRD
+  2. 调用 tech_design → 生成技术方案
+  3. 调用 task_breakdown → 生成任务列表
+
+Output:
+  - PRD: 包含用户故事、验收标准
+  - 技术方案: 架构设计、API设计
+  - 任务列表: 10个任务，带估时和依赖
+```
+
+---
+
+## 5.2 Case Study: 代码重构流水线
+
+### Skill Pipeline
+
+```
+代码分析 → 重构建议 → 代码修改 → 测试验证
+    ↓           ↓           ↓           ↓
+  analyzer   suggestor   modifier   validator
+```
+
+---
+
+# 6. 工具与资源
+
+## 6.1 Skill 开发工具
+
+```bash
+# CLI 工具
+skill-cli create <name>        # 创建新 skill
+skill-cli validate <file>      # 验证 skill 格式
+skill-cli test <file>          # 运行测试
+skill-cli publish <file>       # 发布到 registry
+skill-cli evaluate <file>      # 质量评估
+```
+
+## 6.2 Skill 模板库
+
+| 模板 | 用途 | 链接 |
+|------|------|------|
+| atomic-skill | 原子技能 | /templates/atomic.md |
+| composite-skill | 组合技能 | /templates/composite.md |
+| meta-skill | 元技能 | /templates/meta.md |
+| pipeline | 流水线 | /templates/pipeline.md |
+
+## 6.3 参考资源
+
+- [GitHub Copilot Skills](https://github.com/github/copilot)
+- [Claude Code Best Practices](https://docs.anthropic.com)
+- [LangChain Tools](https://python.langchain.com)
+
+---
+
+# 7. 总结
+
+## 核心理念回顾
+
+1. **Skill 是工程资产** - 不是一次性 Prompt
+2. **Trigger 是关键** - 写得再好，触发不了就没用
+3. **质量可评估** - 5维度评估体系
+4. **系统是目标** - 从单 Skill 到 Skill Graph
+5. **治理不可少** - 安全、版本、注册
+
+## 演进路径
+
+```
+Level 1: 写好单个 Skill
+    ↓
+Level 2: 设计触发机制
+    ↓
+Level 3: 建立质量评估
+    ↓
+Level 4: 构建 Skill 系统
+    ↓
+Level 5: 完善治理体系
+```
+
+---
+
+# 附录：快速参考
+
+## 检查清单（发布前必查）
+
+- [ ] 名称：小写字母+下划线
+- [ ] 描述：场景化，有触发条件和关键词
+- [ ] Triggers：关键词/意图/上下文至少一种
+- [ ] Capabilities：3-5个具体能力点
+- [ ] Constraints：至少2条边界约束
+- [ ] Input Schema：类型、必填、验证完整
+- [ ] Output Schema：格式明确，字段完整
+- [ ] Dependencies：如有依赖，版本明确
+- [ ] Verification：可自动验证的规则
+- [ ] Procedure：步骤编号，逻辑清晰
+- [ ] Examples：2-3个，覆盖不同场景
+- [ ] Anti-patterns：常见错误用法
+- [ ] Quality Score：自评 >= 80分
+
+---
+
+> **最终目标：让 Skill Engineering 成为 AI 时代的软件工程方法论**
